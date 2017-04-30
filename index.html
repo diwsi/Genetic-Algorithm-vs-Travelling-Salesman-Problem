@@ -1,0 +1,258 @@
+﻿<!DOCTYPE html>
+<html>
+
+<head>
+    <title></title>
+    <meta charset="utf-8" />
+    <style>
+        #ctlReport button {
+            margin-bottom: 5px;
+            width: 100%;
+        }
+        
+        #ctlFrm {
+            position: fixed;
+            right: 5px;
+            top: 6px;
+        }
+        
+        #ctlNextGen {
+            width: 150px;
+            height: 35px;
+        }
+        
+        #ctlContent {
+            width: 1500px;
+        }
+        
+        #ctlContent div {
+            float: left;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="ctlFrm">
+        <label>Point Count: </label><br><input id="ctlPointCount" type="number" min="2" value="15"><br>
+        <label>Population Count:  </label><br><input id="ctlPopulationCount" type="number" min="2" value="100">
+        <br>
+        <button onclick="newProblem()">New Problem</button>
+    </div>
+    <div id="ctlContent">
+        <button id="ctlNextGen" onclick="JumptoNextGeneration()">Next Generation</button>
+        <br>
+        <div id="ctlReport"></div>
+        <div>
+            <canvas id="cnv" width="800" height="800"></canvas>
+        </div>
+    </div>
+
+
+    <script type="text/javascript">
+        var canvas = document.getElementById('cnv');
+        var context = canvas.getContext('2d');
+        var points = [];
+        var population = [];
+        var generation = 0;
+
+        //Shuffled index array
+        function getGenome() {
+            var genome = Array.apply(null, { length: points.length }).map(Number.call, Number);
+            var j, x, i;
+            for (i = genome.length; i; i--) {
+                j = Math.floor(Math.random() * i);
+                x = genome[i - 1];
+                genome[i - 1] = genome[j];
+                genome[j] = x;
+            }
+            return genome;
+        }
+
+        //Draw point on canvas
+        function DrawPoint(x, y,color) {
+            var radius = 5;
+            context.beginPath();
+            context.arc(x, y, radius, 0, 2 * Math.PI, false);
+            context.fillStyle = color?color:'green';
+            context.fill();
+            }
+
+        //Draw solution step as a line
+        function DrawLine(x1, y1, x2, y2) {
+            context.beginPath();
+            context.moveTo(x1, y1);
+            context.lineTo(x2, y2);
+            context.stroke();
+        }
+
+        //Draw solution by UI button
+        function DrawSelectedSolution(ind) {
+            DrawSolution(population[ind].genome);
+        }
+
+        //Draw solution
+        function DrawSolution(solution, calculateOnly) {
+            if (!calculateOnly)
+                DrawProblem();
+            var _solution = solution.slice(0);
+            //Return to start point
+            _solution.push(solution[0]);
+            var fitness = 0;
+            for (var index = 0; index < _solution.length - 1; index++) {
+                var p2 = points[_solution[index + 1]];
+                var p1 = points[_solution[index]];
+                fitness += Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+                if (!calculateOnly) {
+                    DrawLine(p1.x, p1.y, p2.x, p2.y);
+                }
+            }
+            return fitness;
+
+        }
+
+        // Create new travelling salesman problem
+        function InitProblem() {
+            var pointCount = document.getElementById("ctlPointCount").value;
+            generation = 0;
+            points = [];
+            for (var i = 0; i < pointCount; i++) {
+                var p = {
+                    x: canvas.width * Math.random(),
+                    y: canvas.height * Math.random()
+                }
+                points.push(p);
+            }
+            DrawProblem();
+        }
+
+        // Visualize problem
+        function DrawProblem() {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            for (var i = 0; i < points.length; i++) {
+                var p = points[i];
+                DrawPoint(p.x, p.y,i==0?"red":"green");
+            }
+        }
+
+        // Generate new population with random genes
+        function InitPopulation() {
+            population = [];
+            var populationtCount = document.getElementById("ctlPopulationCount").value;
+            for (var i = 0; i < populationtCount; i++) {
+                population.push({
+                    genome: getGenome(),
+                    fitness: 0
+                });
+            }
+
+        }
+
+        //Calculate fitness for each individual
+        function SimulateGeneration() {
+            for (var index = 0; index < population.length; index++) {
+                population[index].fitness = DrawSolution(population[index].genome, true);
+
+            }
+        }
+
+        //Alpha selection and mate for population
+        function CreateNextGeneration() {
+            population = population.sort(function (a, b) { return (a.fitness > b.fitness) ? 1 : ((b.fitness > a.fitness) ? -1 : 0); });
+            var popCount = population.length;
+            for (var i = 0; i < popCount / 2; i = i + 2) {
+                var children = SPCrossOver(population[i], population[i + 1]);
+                population[popCount - i - 1] = children[0];
+                population[popCount - i - 2] = children[1];
+            }
+        }
+
+        //Report population fitness
+        function ReportResult() {
+            var champion = population[0];
+            DrawSolution(champion.genome);
+            var reportDom = document.getElementById("ctlReport");
+            reportDom.innerHTML = "Generation: " + generation + "<br>";
+            reportDom.innerHTML += "<b> Best Fitness: " + champion.fitness + "</b><br>(Lower is better)<br>";
+            for (var index = 0; index < population.length; index++) {
+                var fitness = population[index].fitness;
+                reportDom.innerHTML += "<button onclick='DrawSelectedSolution(" + index + ")' >individual " + (index + 1) + " Fitness: " + (fitness > 0 ? fitness : "New Child") + "</button><br>";
+            }
+        }
+
+        //Calculate next generation
+        function JumptoNextGeneration() {
+            generation++;
+            SimulateGeneration();
+            CreateNextGeneration();
+            ReportResult();
+        }
+
+        //Swap a genome index
+        function Mutate(genome) {
+            var sw1 = Math.floor(genome.length * Math.random());
+            var sw2 = Math.floor(genome.length * Math.random());
+            var v1 = genome[sw1];
+            var v2 = genome[sw2];
+            genome[sw2] = v1;
+            genome[sw1] = v2;
+            return genome;
+
+        }
+
+        //Ordered single point crossover         
+        function SPCrossOver(mate1, mate2) {
+            var hasSameGene = true;
+            for (var index = 0; index < mate1.genome.length; index++) {
+                if (mate1.genome[index] != mate2.genome[index]) {
+                    hasSameGene = false;
+                    break;
+                }
+            }
+
+            if (hasSameGene) {
+                mate2.genome = Mutate(mate2.genome);
+            }
+
+
+            var crossPoint = Math.floor(mate1.genome.length * Math.random());
+            var g1_a = mate1.genome.slice(0, crossPoint);
+
+            var g2_a = mate2.genome.slice(0, crossPoint);
+
+            for (var index = 0; index < mate2.genome.length; index++) {
+                var geneBlock = mate2.genome[index];
+                if (g1_a.indexOf(geneBlock) >= 0) continue;
+                g1_a.push(geneBlock);
+            }
+
+
+            for (var index = 0; index < mate1.genome.length; index++) {
+                var geneBlock = mate1.genome[index];
+                if (g2_a.indexOf(geneBlock) >= 0) continue;
+                g2_a.push(geneBlock);
+            }
+
+            return [
+                {
+                    genome: g1_a,
+                    fitness: 0
+                },
+                {
+                    genome: g2_a,
+                    fitness: 0
+                }
+            ]
+
+        }
+
+        function newProblem() {
+            InitProblem();
+            InitPopulation();
+            JumptoNextGeneration();
+        }
+        newProblem();
+    </script>
+</body>
+
+</html>
